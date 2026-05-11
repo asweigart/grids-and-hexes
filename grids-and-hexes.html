@@ -1,0 +1,1399 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GaH - Grids and Hexes</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    /* dark mode (default) */
+    --bg: #1f2230;
+    --panel: #2a2e3f;
+    --panel-2: #343a4e;
+    --line: #4a5066;
+    --text: #e8eaf0;
+    --muted: #9aa0b2;
+    --accent: #7aa7ff;
+    --accent-2: #5b8def;
+    --danger: #ff7a8a;
+    --canvas-bg: #14161e;
+    --input-bg: #1c1f2c;
+    --input-bg-hover: #262a3a;
+    --card-active-bg: #1f2740;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #ecedf2;
+      --panel: #ffffff;
+      --panel-2: #f5f6fa;
+      --line: #d0d4dc;
+      --text: #1c1f2c;
+      --muted: #6a6f80;
+      --accent: #2563eb;
+      --accent-2: #3b82f6;
+      --danger: #c84766;
+      --canvas-bg: #c8ccd6;
+      --input-bg: #ffffff;
+      --input-bg-hover: #e9ebf2;
+      --card-active-bg: #dfe7ff;
+    }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    font: 13px/1.35 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    display: grid;
+    grid-template-rows: auto 1fr;
+  }
+  header {
+    padding: 10px 16px;
+    background: var(--panel);
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 12px;
+  }
+  header h1 { font-size: 14px; font-weight: 600; margin: 0; flex: 0 0 auto; }
+  header .sub { color: var(--muted); font-size: 12px; }
+  header a { color: var(--accent); text-decoration: underline; }
+  header a:hover { color: var(--accent-2); }
+  main {
+    display: grid;
+    grid-template-columns: 360px 1fr;
+    min-height: 0;
+  }
+  aside#controls {
+    background: var(--panel);
+    border-right: 1px solid var(--line);
+    overflow-y: auto;
+    padding: 12px 14px 24px;
+  }
+  section#preview {
+    background: var(--canvas-bg);
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+  #preview-toolbar {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--line);
+    color: var(--muted);
+    display: flex; gap: 14px; align-items: center;
+    flex-wrap: wrap;
+  }
+  #preview-wrap {
+    flex: 1;
+    min-height: 0;
+    overflow: auto;
+    padding: 24px;
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+  }
+  #svg-container {
+    background: #ddd;
+    box-shadow: 0 8px 32px rgba(0,0,0,.5);
+    display: inline-block;
+    line-height: 0;
+  }
+  #svg-container svg { display: block; max-width: 100%; height: auto; }
+  .group {
+    margin-bottom: 14px;
+    background: var(--panel-2);
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .group h2 {
+    margin: 0;
+    padding: 8px 12px;
+    font-size: 12px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: var(--muted);
+    background: rgba(0,0,0,.15);
+    cursor: pointer;
+    user-select: none;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .group h2::before {
+    content: "";
+    width: 0; height: 0;
+    border-left: 4px solid transparent;
+    border-right: 4px solid transparent;
+    border-top: 5px solid var(--muted);
+    transition: transform .15s ease;
+  }
+  .group.collapsed h2::before { transform: rotate(-90deg); }
+  .group.collapsed .group-body { display: none; }
+  .group-body { padding: 10px 12px; display: grid; gap: 8px; }
+  .preset-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 8px;
+  }
+  .preset-card {
+    background: var(--panel);
+    border: 2px solid var(--line);
+    border-radius: 4px;
+    padding: 4px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    transition: border-color .1s, transform .05s;
+  }
+  .preset-card:hover { border-color: var(--accent); }
+  .preset-card.active { border-color: var(--accent-2); background: var(--card-active-bg); }
+  .preset-card .thumb {
+    width: 100%;
+    height: 64px;
+    background: white;
+    border-radius: 2px;
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .preset-card .thumb img {
+    width: 100%; height: 100%;
+    object-fit: cover;
+    display: block;
+  }
+  .preset-card .name {
+    font-size: 10px;
+    color: var(--text);
+    line-height: 1.2;
+    text-align: center;
+    word-wrap: break-word;
+    min-height: 24px;
+  }
+  .row { display: grid; grid-template-columns: 110px 1fr; align-items: center; gap: 8px; }
+  .row label { color: var(--muted); }
+  .row .inline { display: flex; gap: 6px; align-items: center; }
+  .row .inline > * { flex: 1 1 auto; min-width: 0; }
+  input[type=text], input[type=number], select {
+    width: 100%;
+    padding: 5px 7px;
+    background: var(--input-bg);
+    color: var(--text);
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    font: inherit;
+  }
+  input[type=color] {
+    width: 36px; height: 26px; padding: 0; border: 1px solid var(--line);
+    border-radius: 4px; background: transparent; cursor: pointer;
+  }
+  input[type=checkbox] { accent-color: var(--accent); }
+  button {
+    padding: 6px 10px;
+    background: var(--accent-2);
+    color: white;
+    border: 0;
+    border-radius: 4px;
+    cursor: pointer;
+    font: inherit;
+    font-weight: 500;
+  }
+  button:hover { background: var(--accent); }
+  button.secondary { background: #495068; }
+  button.secondary:hover { background: #5a627e; }
+  button.danger { background: #6b3a45; }
+  button.danger:hover { background: #8c4a59; }
+  .seg {
+    display: flex;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+  .seg button {
+    flex: 1;
+    border-radius: 0;
+    background: var(--input-bg);
+    color: var(--text);
+    font-weight: 400;
+    padding: 5px 0;
+  }
+  .seg button.active { background: var(--accent-2); color: white; }
+  .seg button:hover:not(.active) { background: var(--input-bg-hover); }
+  .exports {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 6px;
+  }
+  .exports button { padding: 8px; }
+  .hint { color: var(--muted); font-size: 11px; padding: 2px 0; }
+  .stack { display: grid; gap: 6px; }
+  .row.full { grid-template-columns: 1fr; }
+  hr { border: 0; border-top: 1px solid var(--line); margin: 4px 0; }
+  .pill {
+    display: inline-block; padding: 1px 6px; border-radius: 10px;
+    background: rgba(122,167,255,.15); color: var(--accent);
+    font-size: 11px;
+  }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/svg2pdf.js@2.2.3/dist/svg2pdf.umd.min.js"></script>
+</head>
+<body>
+<header>
+  <h1>GaH - Grids and Hexes</h1>
+  <span class="sub">Created by Al Sweigart <a href="https://inventwithpython.com" target="_blank" rel="noopener">https://inventwithpython.com</a> &mdash; This app works offline. Save the page as a .html file.</span>
+</header>
+<main>
+  <aside id="controls">
+    <div class="group">
+      <h2>Preset</h2>
+      <div class="group-body">
+        <div id="preset-cards" class="preset-grid"></div>
+      </div>
+    </div>
+
+    <div class="group">
+      <h2>Export</h2>
+      <div class="group-body">
+        <div class="row">
+          <label>Raster scale</label>
+          <div class="seg" id="dpi-seg">
+            <button data-value="1" type="button">1×</button>
+            <button data-value="2" class="active" type="button">2×</button>
+            <button data-value="4" type="button">4×</button>
+            <button data-value="8" type="button">8×</button>
+          </div>
+        </div>
+        <div class="hint" id="dpi-hint"></div>
+        <div class="exports">
+          <button id="export-png" type="button">Export PNG</button>
+          <button id="export-webp" type="button">Export WEBP</button>
+          <button id="export-svg" type="button">Export SVG</button>
+          <button id="export-pdf" type="button">Export PDF</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="group">
+      <h2>Grid</h2>
+      <div class="group-body">
+        <div class="row">
+          <label>Type</label>
+          <select id="grid-type">
+            <option value="square">Square</option>
+            <option value="rectangle">Rectangle</option>
+            <option value="hex-pointy">Hex (pointy-top)</option>
+            <option value="hex-flat">Hex (flat-top)</option>
+            <option value="isometric">Isometric (rhombus)</option>
+            <option value="triangle-vertical">Triangle (vertical)</option>
+            <option value="triangle-horizontal">Triangle (horizontal)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>Render</label>
+          <div class="seg" id="render-mode-seg">
+            <button data-value="lines" class="active" type="button">Lines</button>
+            <button data-value="dots" type="button">Dots</button>
+            <button data-value="crosses" type="button">Crosses</button>
+          </div>
+        </div>
+        <div class="row">
+          <label>Cell size</label>
+          <div class="inline">
+            <input id="cell-w" type="number" min="0.1" step="0.1" value="5">
+            <span class="hint" id="cell-w-label">W</span>
+            <input id="cell-h" type="number" min="0.1" step="0.1" value="5">
+            <span class="hint" id="cell-h-label">H</span>
+            <select id="cell-unit">
+              <option value="mm" selected>mm</option>
+              <option value="in">in</option>
+              <option value="pt">pt</option>
+              <option value="px">px</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <label>Lock aspect</label>
+          <div><input id="lock-aspect" type="checkbox" checked> <span class="hint">Width = Height (rectangle/hex grids ignore this)</span></div>
+        </div>
+        <div class="row">
+          <label>Limit width</label>
+          <div class="inline">
+            <input id="limit-w-check" type="checkbox">
+            <input id="limit-w-n" type="number" min="1" step="1" value="10" disabled>
+            <span class="hint">cells</span>
+          </div>
+        </div>
+        <div class="row">
+          <label>Limit height</label>
+          <div class="inline">
+            <input id="limit-h-check" type="checkbox">
+            <input id="limit-h-n" type="number" min="1" step="1" value="10" disabled>
+            <span class="hint">cells</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="group">
+      <h2>Style</h2>
+      <div class="group-body">
+        <div class="row">
+          <label>Line color</label>
+          <div class="inline">
+            <input id="line-color" type="color" value="#4a90e2">
+            <input id="line-color-text" type="text" value="#4a90e2">
+          </div>
+        </div>
+        <div class="row">
+          <label>Line thickness</label>
+          <div class="inline">
+            <input id="line-thick" type="number" min="0.05" step="0.05" value="0.2">
+            <select id="line-thick-unit">
+              <option value="mm" selected>mm</option>
+              <option value="pt">pt</option>
+              <option value="px">px</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <label>Line style</label>
+          <select id="line-style">
+            <option value="solid">Solid</option>
+            <option value="dashed">Dashed</option>
+            <option value="dotted">Dotted</option>
+            <option value="major-minor">Major / minor</option>
+          </select>
+        </div>
+        <div class="row" id="major-row" style="display:none">
+          <label>Major every</label>
+          <div class="inline">
+            <input id="major-every" type="number" min="2" max="50" step="1" value="5">
+            <span class="hint">×</span>
+            <input id="major-mult" type="number" min="1" step="0.1" value="2">
+            <span class="hint">thicker</span>
+          </div>
+        </div>
+        <div class="row" id="vertex-size-row" style="display:none">
+          <label>Marker size</label>
+          <div class="inline">
+            <input id="vertex-size" type="number" min="0.1" step="0.1" value="0.8">
+            <select id="vertex-size-unit">
+              <option value="mm" selected>mm</option>
+              <option value="pt">pt</option>
+              <option value="px">px</option>
+            </select>
+          </div>
+        </div>
+        <div class="row" id="cross-arm-row" style="display:none">
+          <label>Cross arm</label>
+          <div class="inline">
+            <input id="cross-arm" type="number" min="0.1" step="0.1" value="1.5">
+            <span class="hint">mm (full length)</span>
+          </div>
+        </div>
+        <div class="row">
+          <label>Background</label>
+          <div class="inline">
+            <input id="bg-color" type="color" value="#ffffff">
+            <input id="bg-color-text" type="text" value="#ffffff">
+            <label class="hint" style="display:flex;align-items:center;gap:4px;flex:0 0 auto">
+              <input id="bg-transparent" type="checkbox"> none
+            </label>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="group">
+      <h2>Paper &amp; layout</h2>
+      <div class="group-body">
+        <div class="row">
+          <label>Paper</label>
+          <select id="paper-size">
+            <option value="Letter" selected>Letter (8.5 × 11 in)</option>
+            <option value="Legal">Legal (8.5 × 14 in)</option>
+            <option value="Tabloid">Tabloid (11 × 17 in)</option>
+            <option value="A3">A3 (297 × 420 mm)</option>
+            <option value="A4">A4 (210 × 297 mm)</option>
+            <option value="A5">A5 (148 × 210 mm)</option>
+            <option value="A6">A6 (105 × 148 mm)</option>
+            <option value="B4">B4 (250 × 353 mm)</option>
+            <option value="B5">B5 (176 × 250 mm)</option>
+            <option value="Custom">Custom…</option>
+          </select>
+        </div>
+        <div class="row" id="custom-paper-row" style="display:none">
+          <label>Custom size</label>
+          <div class="inline">
+            <input id="custom-w" type="number" min="1" step="0.1" value="210">
+            <span class="hint">×</span>
+            <input id="custom-h" type="number" min="1" step="0.1" value="297">
+            <select id="custom-unit">
+              <option value="mm" selected>mm</option>
+              <option value="in">in</option>
+              <option value="pt">pt</option>
+              <option value="px">px</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <label>Orientation</label>
+          <div class="seg" id="orient-seg">
+            <button data-value="portrait" class="active" type="button">Portrait</button>
+            <button data-value="landscape" type="button">Landscape</button>
+          </div>
+        </div>
+        <div class="row">
+          <label>PDF tiling</label>
+          <select id="tiling">
+            <option value="1" selected>1 per page</option>
+            <option value="2">2 per page</option>
+            <option value="4">4 per page</option>
+            <option value="8">8 per page</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>PDF margin</label>
+          <div class="inline">
+            <input id="pdf-margin" type="number" min="0" step="0.5" value="10">
+            <span class="hint">mm (outer)</span>
+            <input id="pdf-gutter" type="number" min="0" step="0.5" value="5">
+            <span class="hint">mm (gutter)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </aside>
+
+  <section id="preview">
+    <div id="preview-toolbar">
+      <span id="preview-dims"></span>
+      <span id="preview-cells"></span>
+      <span style="margin-left:auto" class="hint">Preview — exports use real paper dimensions</span>
+    </div>
+    <div id="preview-wrap">
+      <div id="svg-container"></div>
+    </div>
+  </section>
+</main>
+
+<script>
+(() => {
+"use strict";
+
+// ---------- Units ----------
+// All internal math is mm. UNIT_TO_MM[u] converts a value in unit u to mm.
+const UNIT_TO_MM = { mm: 1, in: 25.4, pt: 25.4/72, px: 25.4/96 };
+const toMm = (v, u) => v * (UNIT_TO_MM[u] ?? 1);
+
+// ---------- Paper sizes (mm, portrait) ----------
+const PAPER = {
+  A3:      [297, 420],
+  A4:      [210, 297],
+  A5:      [148, 210],
+  A6:      [105, 148],
+  B4:      [250, 353],
+  B5:      [176, 250],
+  Letter:  [215.9, 279.4],
+  Legal:   [215.9, 355.6],
+  Tabloid: [279.4, 431.8],
+};
+
+function paperDims(name, orientation, custom) {
+  let w, h;
+  if (name === "Custom") { w = custom.w; h = custom.h; }
+  else { [w, h] = PAPER[name]; }
+  if (orientation === "landscape") [w, h] = [h, w];
+  return { w, h };
+}
+
+// ---------- Tile layouts (rows × cols) ----------
+// Picks rows/cols to roughly match paper aspect.
+function tileLayout(n, paperW, paperH) {
+  // For each n, choose a rows×cols whose tile aspect best matches paper.
+  // Layouts considered (rows, cols):
+  const candidates = {
+    1: [[1,1]],
+    2: [[1,2],[2,1]],
+    4: [[2,2],[1,4],[4,1]],
+    8: [[2,4],[4,2],[1,8],[8,1]],
+  }[n] || [[1,1]];
+  let best = null, bestScore = Infinity;
+  for (const [r, c] of candidates) {
+    // tile aspect = (paperW/c) / (paperH/r) = (paperW*r)/(paperH*c)
+    const tileAspect = (paperW / c) / (paperH / r);
+    const paperAspect = paperW / paperH;
+    const score = Math.abs(Math.log(tileAspect / paperAspect));
+    if (score < bestScore) { bestScore = score; best = [r, c]; }
+  }
+  return { rows: best[0], cols: best[1] };
+}
+
+// ---------- Stroke dasharray helpers ----------
+function dashArray(style, thickness) {
+  if (style === "dashed") return `${thickness*8},${thickness*4}`;
+  // Dotted = round caps + zero-length dashes, spaced ~5x thickness apart.
+  if (style === "dotted") return `0,${thickness*5}`;
+  return null;
+}
+function strokeAttrs(style, thickness, color, lineCap) {
+  const da = dashArray(style, thickness);
+  let s = `stroke="${color}" stroke-width="${thickness}"`;
+  if (da) s += ` stroke-dasharray="${da}"`;
+  if (lineCap) s += ` stroke-linecap="${lineCap}"`;
+  return s;
+}
+
+// ---------- Grid renderers ----------
+// Each renderer returns an array of primitives:
+//   {type:'line', x1,y1,x2,y2, major?}
+//   {type:'polygon', points:[{x,y},...]}
+// For "dots"/"crosses" modes we don't use the lines — we extract vertices
+// via getVertices() instead.
+//
+// All coordinates are in mm, in the local rectangle (0,0)-(W,H).
+
+const GRIDS = {
+  square: {
+    label: "Square",
+    getLines(cfg) {
+      const out = [];
+      const { W, H } = cfg;
+      const cw = cfg.cellW;
+      const N = (cfg.lineStyle === "major-minor") ? cfg.majorEvery : 1;
+      // Verticals
+      for (let i = 0, x = 0; x <= W + 1e-6; i++, x = i * cw) {
+        out.push({ type:"line", x1:x, y1:0, x2:x, y2:H, major: i % N === 0 });
+      }
+      // Horizontals
+      for (let i = 0, y = 0; y <= H + 1e-6; i++, y = i * cw) {
+        out.push({ type:"line", x1:0, y1:y, x2:W, y2:y, major: i % N === 0 });
+      }
+      return out;
+    },
+    getVertices(cfg) {
+      const out = [];
+      const { W, H } = cfg;
+      const cw = cfg.cellW;
+      for (let x = 0; x <= W + 1e-6; x += cw)
+        for (let y = 0; y <= H + 1e-6; y += cw)
+          out.push({ x, y });
+      return out;
+    },
+  },
+
+  rectangle: {
+    label: "Rectangle",
+    getLines(cfg) {
+      const out = [];
+      const { W, H } = cfg;
+      const { cellW, cellH } = cfg;
+      const N = (cfg.lineStyle === "major-minor") ? cfg.majorEvery : 1;
+      for (let i = 0, x = 0; x <= W + 1e-6; i++, x = i * cellW) {
+        out.push({ type:"line", x1:x, y1:0, x2:x, y2:H, major: i % N === 0 });
+      }
+      for (let i = 0, y = 0; y <= H + 1e-6; i++, y = i * cellH) {
+        out.push({ type:"line", x1:0, y1:y, x2:W, y2:y, major: i % N === 0 });
+      }
+      return out;
+    },
+    getVertices(cfg) {
+      const out = [];
+      const { W, H, cellW, cellH } = cfg;
+      for (let x = 0; x <= W + 1e-6; x += cellW)
+        for (let y = 0; y <= H + 1e-6; y += cellH)
+          out.push({ x, y });
+      return out;
+    },
+  },
+
+  "hex-pointy": {
+    label: "Hex pointy-top",
+    getLines(cfg) {
+      // Pointy-top: vertex at top. side length s, width = sqrt(3)*s, height = 2*s.
+      // Horizontal spacing between centers = sqrt(3)*s; vertical = 1.5*s; odd rows offset.
+      const s = cfg.cellW;
+      const sqrt3 = Math.sqrt(3);
+      const hexW = sqrt3 * s;
+      const vSpacing = 1.5 * s;
+      const cols = Math.ceil(cfg.W / hexW) + 2;
+      const rows = Math.ceil(cfg.H / vSpacing) + 2;
+      const edges = new Map(); // dedupe identical edges
+      for (let r = -1; r <= rows; r++) {
+        for (let c = -1; c <= cols; c++) {
+          const cx = c * hexW + ((r & 1) ? hexW/2 : 0);
+          const cy = r * vSpacing;
+          const corners = pointyCorners(cx, cy, s);
+          for (let i = 0; i < 6; i++) {
+            const a = corners[i], b = corners[(i+1)%6];
+            addEdge(edges, a.x, a.y, b.x, b.y);
+          }
+        }
+      }
+      return [...edges.values()].map(e => ({type:"line", ...e}));
+    },
+    getVertices(cfg) {
+      const s = cfg.cellW;
+      const sqrt3 = Math.sqrt(3);
+      const hexW = sqrt3 * s;
+      const vSpacing = 1.5 * s;
+      const cols = Math.ceil(cfg.W / hexW) + 2;
+      const rows = Math.ceil(cfg.H / vSpacing) + 2;
+      const set = new Map();
+      for (let r = -1; r <= rows; r++) {
+        for (let c = -1; c <= cols; c++) {
+          const cx = c * hexW + ((r & 1) ? hexW/2 : 0);
+          const cy = r * vSpacing;
+          for (const p of pointyCorners(cx, cy, s)) {
+            const key = `${Math.round(p.x*1000)},${Math.round(p.y*1000)}`;
+            if (!set.has(key)) set.set(key, p);
+          }
+        }
+      }
+      return [...set.values()];
+    },
+  },
+
+  "hex-flat": {
+    label: "Hex flat-top",
+    getLines(cfg) {
+      const s = cfg.cellW;
+      const sqrt3 = Math.sqrt(3);
+      const hexH = sqrt3 * s;
+      const hSpacing = 1.5 * s;
+      const cols = Math.ceil(cfg.W / hSpacing) + 2;
+      const rows = Math.ceil(cfg.H / hexH) + 2;
+      const edges = new Map();
+      for (let c = -1; c <= cols; c++) {
+        for (let r = -1; r <= rows; r++) {
+          const cx = c * hSpacing;
+          const cy = r * hexH + ((c & 1) ? hexH/2 : 0);
+          const corners = flatCorners(cx, cy, s);
+          for (let i = 0; i < 6; i++) {
+            const a = corners[i], b = corners[(i+1)%6];
+            addEdge(edges, a.x, a.y, b.x, b.y);
+          }
+        }
+      }
+      return [...edges.values()].map(e => ({type:"line", ...e}));
+    },
+    getVertices(cfg) {
+      const s = cfg.cellW;
+      const sqrt3 = Math.sqrt(3);
+      const hexH = sqrt3 * s;
+      const hSpacing = 1.5 * s;
+      const cols = Math.ceil(cfg.W / hSpacing) + 2;
+      const rows = Math.ceil(cfg.H / hexH) + 2;
+      const set = new Map();
+      for (let c = -1; c <= cols; c++) {
+        for (let r = -1; r <= rows; r++) {
+          const cx = c * hSpacing;
+          const cy = r * hexH + ((c & 1) ? hexH/2 : 0);
+          for (const p of flatCorners(cx, cy, s)) {
+            const key = `${Math.round(p.x*1000)},${Math.round(p.y*1000)}`;
+            if (!set.has(key)) set.set(key, p);
+          }
+        }
+      }
+      return [...set.values()];
+    },
+  },
+
+  // Isometric (rhombus) = two diagonal line families at +30° / -30° from horizontal.
+  // cellW = rhombus edge length s; perpendicular spacing = sin(60°)*s = sqrt(3)/2*s.
+  isometric: {
+    label: "Isometric",
+    getLines(cfg) {
+      const out = [];
+      const { W, H } = cfg;
+      const s = cfg.cellW;
+      const d = (Math.sqrt(3) / 2) * s;
+      family(out, W, H, +Math.PI/6, d);
+      family(out, W, H, -Math.PI/6, d);
+      return out;
+    },
+    getVertices(cfg) {
+      const s = cfg.cellW;
+      const d = (Math.sqrt(3) / 2) * s;
+      return intersectionVertices({ ...cfg, cellW: d }, [+Math.PI/6, -Math.PI/6]);
+    },
+  },
+
+  // Triangle (vertical) = horizontal lines + two diagonal families at ±60°
+  // Triangle bases are horizontal, apex up/down.
+  "triangle-vertical": {
+    label: "Triangle (vertical)",
+    getLines(cfg) {
+      const out = [];
+      const { W, H } = cfg;
+      const s = cfg.cellW; // triangle edge length
+      // Horizontal lines separated by sqrt(3)/2 * s
+      const rowH = (Math.sqrt(3)/2) * s;
+      const N = (cfg.lineStyle === "major-minor") ? cfg.majorEvery : 1;
+      for (let i = 0, y = 0; y <= H + 1e-6; i++, y = i * rowH) {
+        out.push({ type:"line", x1:0, y1:y, x2:W, y2:y, major: i % N === 0 });
+      }
+      // Two diagonal families at ±60° from horizontal, perpendicular spacing = rowH? Actually
+      // perpendicular distance between adjacent diagonals in a triangle grid = sqrt(3)/2 * s.
+      family(out, W, H, +Math.PI/3, rowH);  // +60°
+      family(out, W, H, -Math.PI/3, rowH);  // -60°
+      return out;
+    },
+    getVertices(cfg) {
+      // Vertices form a triangular lattice. Spacing: horizontal = s, vertical = sqrt(3)/2 * s,
+      // alternating rows offset by s/2.
+      const out = [];
+      const { W, H } = cfg;
+      const s = cfg.cellW;
+      const rowH = (Math.sqrt(3)/2) * s;
+      for (let i = 0, y = 0; y <= H + 1e-6; i++, y = i * rowH) {
+        const offset = (i & 1) ? s/2 : 0;
+        for (let x = -offset; x <= W + 1e-6; x += s) {
+          if (x >= -1e-6) out.push({ x, y });
+        }
+      }
+      return out;
+    },
+  },
+
+  // Triangle (horizontal) = vertical lines + two diagonal families at ±30°
+  // Triangle bases are vertical, apex left/right.
+  "triangle-horizontal": {
+    label: "Triangle (horizontal)",
+    getLines(cfg) {
+      const out = [];
+      const { W, H } = cfg;
+      const s = cfg.cellW;
+      const colW = (Math.sqrt(3)/2) * s;
+      const N = (cfg.lineStyle === "major-minor") ? cfg.majorEvery : 1;
+      for (let i = 0, x = 0; x <= W + 1e-6; i++, x = i * colW) {
+        out.push({ type:"line", x1:x, y1:0, x2:x, y2:H, major: i % N === 0 });
+      }
+      family(out, W, H, +Math.PI/6, colW);   // +30°
+      family(out, W, H, -Math.PI/6, colW);   // -30°
+      return out;
+    },
+    getVertices(cfg) {
+      const out = [];
+      const { W, H } = cfg;
+      const s = cfg.cellW;
+      const colW = (Math.sqrt(3)/2) * s;
+      for (let i = 0, x = 0; x <= W + 1e-6; i++, x = i * colW) {
+        const offset = (i & 1) ? s/2 : 0;
+        for (let y = -offset; y <= H + 1e-6; y += s) {
+          if (y >= -1e-6) out.push({ x, y });
+        }
+      }
+      return out;
+    },
+  },
+};
+
+// Hex corner helpers (mm)
+function pointyCorners(cx, cy, s) {
+  // Pointy-top: vertices at 90°, 150°, 210°, 270°, 330°, 30°
+  const out = [];
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI/180 * (60 * i + 30);
+    out.push({ x: cx + s * Math.cos(a), y: cy + s * Math.sin(a) });
+  }
+  return out;
+}
+function flatCorners(cx, cy, s) {
+  const out = [];
+  for (let i = 0; i < 6; i++) {
+    const a = Math.PI/180 * (60 * i);
+    out.push({ x: cx + s * Math.cos(a), y: cy + s * Math.sin(a) });
+  }
+  return out;
+}
+
+function addEdge(map, x1, y1, x2, y2) {
+  // Canonical: smaller endpoint first.
+  let a = { x: x1, y: y1 }, b = { x: x2, y: y2 };
+  if (a.x > b.x || (a.x === b.x && a.y > b.y)) [a, b] = [b, a];
+  const k = `${Math.round(a.x*1000)},${Math.round(a.y*1000)}|${Math.round(b.x*1000)},${Math.round(b.y*1000)}`;
+  if (!map.has(k)) map.set(k, { x1: a.x, y1: a.y, x2: b.x, y2: b.y });
+}
+
+// Sweep a family of parallel lines across the rect, perpendicular spacing = d.
+// theta = angle from x-axis of the line direction.
+function family(out, W, H, theta, d) {
+  // Perpendicular unit vector to the line direction
+  const nx = -Math.sin(theta), ny = Math.cos(theta);
+  // Project the four corners onto n; the range of t = nx*x + ny*y across the rect:
+  const corners = [[0,0],[W,0],[0,H],[W,H]];
+  let tmin = Infinity, tmax = -Infinity;
+  for (const [x, y] of corners) {
+    const t = nx * x + ny * y;
+    if (t < tmin) tmin = t;
+    if (t > tmax) tmax = t;
+  }
+  // Quantize so lines pass through (0,0) when their offset = 0.
+  const kStart = Math.floor(tmin / d);
+  const kEnd = Math.ceil(tmax / d);
+  for (let k = kStart; k <= kEnd; k++) {
+    const t = k * d;
+    // Line: nx*x + ny*y = t. Intersect with rect [0,W]×[0,H] for segment endpoints.
+    const pts = clipLineToRect(nx, ny, t, W, H);
+    if (pts.length === 2) {
+      out.push({ type:"line", x1: pts[0].x, y1: pts[0].y, x2: pts[1].x, y2: pts[1].y });
+    }
+  }
+}
+
+function clipLineToRect(a, b, c, W, H) {
+  // Line equation: a*x + b*y = c. Intersect each rect edge.
+  const pts = [];
+  const push = (x, y) => {
+    if (x < -1e-6 || x > W + 1e-6 || y < -1e-6 || y > H + 1e-6) return;
+    // dedupe near-identical
+    for (const p of pts) {
+      if (Math.abs(p.x - x) < 1e-4 && Math.abs(p.y - y) < 1e-4) return;
+    }
+    pts.push({ x, y });
+  };
+  // x = 0 → b*y = c → y = c/b
+  if (Math.abs(b) > 1e-9) push(0, c / b);
+  // x = W
+  if (Math.abs(b) > 1e-9) push(W, (c - a*W) / b);
+  // y = 0
+  if (Math.abs(a) > 1e-9) push(c / a, 0);
+  // y = H
+  if (Math.abs(a) > 1e-9) push((c - b*H) / a, H);
+  return pts.slice(0, 2);
+}
+
+function intersectionVertices(cfg, angles) {
+  // For isometric/triangle dot mode: compute lattice intersections of the line families.
+  // For two-family (isometric) lattice: spacing along each axis is cfg.cellW perpendicular,
+  // so intersection density follows.
+  // We can extract them by collecting line objects then pairwise-intersecting near the rect,
+  // but cheaper: generate the lattice directly.
+  const out = [];
+  const { W, H } = cfg;
+  const d = cfg.cellW;
+  // For 2 angles theta1, theta2: basis vectors along line directions, lattice = i*v1 + j*v2
+  // where v_k is perpendicular spacing d in direction normal to theta_k? Actually a simpler way:
+  // The two line equations are nx_k*x + ny_k*y = k_n * d for k_n integer.
+  // Intersection of family-1 line k and family-2 line m: 2x2 linear solve.
+  const [t1, t2] = angles;
+  const n1 = [-Math.sin(t1), Math.cos(t1)];
+  const n2 = [-Math.sin(t2), Math.cos(t2)];
+  const det = n1[0]*n2[1] - n1[1]*n2[0];
+  if (Math.abs(det) < 1e-9) return out;
+  // k range from projecting corners
+  const range = (n) => {
+    let lo = Infinity, hi = -Infinity;
+    for (const [x, y] of [[0,0],[W,0],[0,H],[W,H]]) {
+      const t = n[0]*x + n[1]*y;
+      if (t < lo) lo = t; if (t > hi) hi = t;
+    }
+    return [Math.floor(lo/d), Math.ceil(hi/d)];
+  };
+  const [k1lo, k1hi] = range(n1);
+  const [k2lo, k2hi] = range(n2);
+  for (let k1 = k1lo; k1 <= k1hi; k1++) {
+    for (let k2 = k2lo; k2 <= k2hi; k2++) {
+      const c1 = k1 * d, c2 = k2 * d;
+      const x = (c1 * n2[1] - c2 * n1[1]) / det;
+      const y = (n1[0] * c2 - n2[0] * c1) / det;
+      if (x >= -1e-6 && x <= W + 1e-6 && y >= -1e-6 && y <= H + 1e-6) {
+        out.push({ x, y });
+      }
+    }
+  }
+  return out;
+}
+
+// ---------- SVG building ----------
+// One "cell" in mm, per grid type, used by the limit-width/height feature.
+// Width = horizontal step between adjacent cells; Height = vertical step.
+function cellSpan(gridType, cellW, cellH) {
+  const s = cellW;
+  const sqrt3 = Math.sqrt(3);
+  switch (gridType) {
+    case "square":              return { w: cellW,        h: cellW };
+    case "rectangle":           return { w: cellW,        h: cellH };
+    case "hex-pointy":          return { w: sqrt3 * s,    h: 1.5 * s };
+    case "hex-flat":            return { w: 1.5 * s,      h: sqrt3 * s };
+    case "isometric":           return { w: sqrt3 * s,    h: s };
+    case "triangle-vertical":   return { w: s,            h: (sqrt3 / 2) * s };
+    case "triangle-horizontal": return { w: (sqrt3 / 2) * s, h: s };
+    default:                    return { w: cellW,        h: cellW };
+  }
+}
+
+function buildSvg(cfg) {
+  const { paperW, paperH, lineThickness, lineColor, lineStyle, bgColor, bgTransparent, renderMode,
+          gridType, majorMult, vertexSize, crossArm, limitW, limitH } = cfg;
+
+  // If a limit is set, the grid is drawn into a smaller rectangle centered on the paper.
+  // Otherwise the grid fills the entire paper.
+  const drawW = (limitW != null && limitW > 0) ? Math.min(limitW, paperW) : paperW;
+  const drawH = (limitH != null && limitH > 0) ? Math.min(limitH, paperH) : paperH;
+  const offX = (paperW - drawW) / 2;
+  const offY = (paperH - drawH) / 2;
+  const localCfg = { ...cfg, W: drawW, H: drawH };
+
+  const parts = [];
+  parts.push(
+    `<svg xmlns="http://www.w3.org/2000/svg" `
+    + `width="${paperW}mm" height="${paperH}mm" viewBox="0 0 ${paperW} ${paperH}" `
+    + `shape-rendering="geometricPrecision">`
+  );
+  if (!bgTransparent) {
+    parts.push(`<rect x="0" y="0" width="${paperW}" height="${paperH}" fill="${bgColor}"/>`);
+  }
+  parts.push(`<defs><clipPath id="page-clip"><rect x="${fmt(offX)}" y="${fmt(offY)}" width="${fmt(drawW)}" height="${fmt(drawH)}"/></clipPath></defs>`);
+  // Outer group: clip in SVG root coords. Inner group: translate to centered position.
+  // (Keeping clip and transform on separate groups avoids browser coord-system ambiguity.)
+  parts.push(`<g clip-path="url(#page-clip)"><g transform="translate(${fmt(offX)} ${fmt(offY)})">`);
+
+  const grid = GRIDS[gridType];
+
+  if (renderMode === "lines") {
+    const lines = grid.getLines(localCfg);
+    if (lineStyle === "major-minor") {
+      const minorThick = lineThickness;
+      const majorThick = lineThickness * majorMult;
+      const minorLines = lines.filter(l => !l.major);
+      const majorLines = lines.filter(l => l.major);
+      parts.push(linesGroup(minorLines, "solid", minorThick, lineColor));
+      parts.push(linesGroup(majorLines, "solid", majorThick, lineColor));
+    } else {
+      parts.push(linesGroup(lines, lineStyle, lineThickness, lineColor));
+    }
+  } else if (renderMode === "dots") {
+    const verts = grid.getVertices(localCfg);
+    const r = vertexSize / 2;
+    const inner = verts.map(p => `<circle cx="${fmt(p.x)}" cy="${fmt(p.y)}" r="${fmt(r)}"/>`).join("");
+    parts.push(`<g fill="${lineColor}" stroke="none">${inner}</g>`);
+  } else if (renderMode === "crosses") {
+    const verts = grid.getVertices(localCfg);
+    const a = crossArm / 2;
+    const inner = verts.map(p => {
+      const x = fmt(p.x), y = fmt(p.y);
+      return `<line x1="${fmt(p.x-a)}" y1="${y}" x2="${fmt(p.x+a)}" y2="${y}"/>`
+           + `<line x1="${x}" y1="${fmt(p.y-a)}" x2="${x}" y2="${fmt(p.y+a)}"/>`;
+    }).join("");
+    parts.push(`<g stroke="${lineColor}" stroke-width="${lineThickness}" stroke-linecap="butt">${inner}</g>`);
+  }
+
+  parts.push(`</g></g></svg>`);
+  return parts.join("");
+}
+
+function linesGroup(lines, style, thickness, color) {
+  if (!lines.length) return "";
+  const cap = (style === "dotted") ? "round" : "butt";
+  const sa = strokeAttrs(style, thickness, color, cap);
+  const inner = lines.map(l =>
+    `<line x1="${fmt(l.x1)}" y1="${fmt(l.y1)}" x2="${fmt(l.x2)}" y2="${fmt(l.y2)}"/>`
+  ).join("");
+  return `<g ${sa} fill="none">${inner}</g>`;
+}
+
+function fmt(n) {
+  // Trim to 4 decimal places — keeps SVG small and avoids floating-point noise.
+  return (Math.round(n * 10000) / 10000).toString();
+}
+
+// ---------- Presets ----------
+// All built-ins use gray on white for a consistent printable look.
+const PRESET_LINE = "#BBBBBB";
+const PRESET_BG   = "#ffffff";
+const BUILTIN_PRESETS = [
+  { name: "Square 5mm",            cfg: { gridType:"square",             cellW:5,    cellH:5,    cellUnit:"mm", lineColor:PRESET_LINE, lineThickness:0.18, lineThicknessUnit:"mm", lineStyle:"solid",       renderMode:"lines",   bgColor:PRESET_BG, bgTransparent:false, paperSize:"Letter", orientation:"portrait" } },
+  { name: "Quad 1/4 in",           cfg: { gridType:"square",             cellW:0.25, cellH:0.25, cellUnit:"in", lineColor:PRESET_LINE, lineThickness:0.18, lineThicknessUnit:"mm", lineStyle:"solid",       renderMode:"lines",   bgColor:PRESET_BG, bgTransparent:false, paperSize:"Letter", orientation:"portrait" } },
+  { name: "Major/minor 2mm",       cfg: { gridType:"square",             cellW:2,    cellH:2,    cellUnit:"mm", lineColor:PRESET_LINE, lineThickness:0.12, lineThicknessUnit:"mm", lineStyle:"major-minor", majorEvery:5, majorMult:2, renderMode:"lines", bgColor:PRESET_BG, bgTransparent:false, paperSize:"A4",     orientation:"portrait" } },
+  { name: "Hex 12mm pointy",       cfg: { gridType:"hex-pointy",         cellW:12.7, cellH:12.7, cellUnit:"mm", lineColor:PRESET_LINE, lineThickness:0.25, lineThicknessUnit:"mm", lineStyle:"solid",       renderMode:"lines",   bgColor:PRESET_BG, bgTransparent:false, paperSize:"Letter", orientation:"portrait" } },
+  { name: "Hex 25mm flat",         cfg: { gridType:"hex-flat",           cellW:25.4, cellH:25.4, cellUnit:"mm", lineColor:PRESET_LINE, lineThickness:0.3,  lineThicknessUnit:"mm", lineStyle:"solid",       renderMode:"lines",   bgColor:PRESET_BG, bgTransparent:false, paperSize:"Letter", orientation:"portrait" } },
+  { name: "Hex 10mm flat",         cfg: { gridType:"hex-flat",           cellW:10,   cellH:10,   cellUnit:"mm", lineColor:PRESET_LINE, lineThickness:0.2,  lineThicknessUnit:"mm", lineStyle:"solid",       renderMode:"lines",   bgColor:PRESET_BG, bgTransparent:false, paperSize:"A4",     orientation:"portrait" } },
+  { name: "Isometric 5mm",         cfg: { gridType:"isometric",          cellW:5,    cellH:5,    cellUnit:"mm", lineColor:PRESET_LINE, lineThickness:0.18, lineThicknessUnit:"mm", lineStyle:"solid",       renderMode:"lines",   bgColor:PRESET_BG, bgTransparent:false, paperSize:"A4",     orientation:"portrait" } },
+  { name: "Triangle 8mm vert",     cfg: { gridType:"triangle-vertical",  cellW:8,    cellH:8,    cellUnit:"mm", lineColor:PRESET_LINE, lineThickness:0.2,  lineThicknessUnit:"mm", lineStyle:"solid",       renderMode:"lines",   bgColor:PRESET_BG, bgTransparent:false, paperSize:"A4",     orientation:"portrait" } },
+  { name: "Dot grid 5mm",          cfg: { gridType:"square",             cellW:5,    cellH:5,    cellUnit:"mm", lineColor:PRESET_LINE, lineThickness:0.15, lineThicknessUnit:"mm", lineStyle:"solid",       renderMode:"dots",    vertexSize:0.7, vertexSizeUnit:"mm", bgColor:PRESET_BG, bgTransparent:false, paperSize:"A5",     orientation:"portrait" } },
+  { name: "Dot iso 5mm",           cfg: { gridType:"isometric",          cellW:5,    cellH:5,    cellUnit:"mm", lineColor:PRESET_LINE, lineThickness:0.15, lineThicknessUnit:"mm", lineStyle:"solid",       renderMode:"dots",    vertexSize:0.7, vertexSizeUnit:"mm", bgColor:PRESET_BG, bgTransparent:false, paperSize:"A4",     orientation:"portrait" } },
+  { name: "Cross grid 1/4 in",     cfg: { gridType:"square",             cellW:0.25, cellH:0.25, cellUnit:"in", lineColor:PRESET_LINE, lineThickness:0.18, lineThicknessUnit:"mm", lineStyle:"solid",       renderMode:"crosses", crossArm:1.5, bgColor:PRESET_BG, bgTransparent:false, paperSize:"Letter", orientation:"portrait" } },
+];
+
+// Build a small SVG preview of a preset, encoded as a data URI.
+function buildPresetThumbnail(preset) {
+  const c = preset.cfg;
+  const cellMm = toMm(c.cellW, c.cellUnit || "mm");
+  // Always show ~5-6 cells/hexes regardless of cell size.
+  const thumbW = cellMm * 5.5;
+  const thumbH = cellMm * 6.5;
+  const lineThickness = toMm(c.lineThickness ?? 0.2, c.lineThicknessUnit || "mm");
+  const vertexSize = toMm(c.vertexSize ?? 0.8, c.vertexSizeUnit || "mm");
+  const cfg = {
+    gridType: c.gridType,
+    renderMode: c.renderMode || "lines",
+    cellW: cellMm,
+    cellH: cellMm,
+    lineThickness,
+    lineColor: c.lineColor || PRESET_LINE,
+    lineStyle: c.lineStyle || "solid",
+    majorEvery: c.majorEvery ?? 5,
+    majorMult: c.majorMult ?? 2,
+    vertexSize,
+    crossArm: c.crossArm ?? 1.5,
+    bgColor: c.bgColor || PRESET_BG,
+    bgTransparent: !!c.bgTransparent,
+    paperW: thumbW,
+    paperH: thumbH,
+  };
+  const svg = buildSvg(cfg);
+  return "data:image/svg+xml;utf8," + encodeURIComponent(svg);
+}
+
+// ---------- DOM helpers ----------
+const $ = (id) => document.getElementById(id);
+
+function setSeg(segEl, value) {
+  for (const btn of segEl.querySelectorAll("button")) {
+    btn.classList.toggle("active", btn.dataset.value === String(value));
+  }
+}
+function getSeg(segEl) {
+  const el = segEl.querySelector("button.active");
+  return el ? el.dataset.value : null;
+}
+function wireSeg(segEl, onChange) {
+  segEl.addEventListener("click", (e) => {
+    const btn = e.target.closest("button");
+    if (!btn) return;
+    setSeg(segEl, btn.dataset.value);
+    onChange(btn.dataset.value);
+  });
+}
+
+// ---------- State / config gathering ----------
+function readConfig() {
+  const cellUnit = $("cell-unit").value;
+  const cellWraw = parseFloat($("cell-w").value) || 0;
+  const cellHraw = parseFloat($("cell-h").value) || 0;
+  const lockAspect = $("lock-aspect").checked;
+  const gridType = $("grid-type").value;
+  const hexLike = gridType.startsWith("hex") || gridType === "isometric" || gridType.startsWith("triangle");
+  const cellW = toMm(cellWraw, cellUnit);
+  let cellH = toMm((lockAspect || hexLike) ? cellWraw : cellHraw, cellUnit);
+
+  const lineThickUnit = $("line-thick-unit").value;
+  const lineThickness = toMm(parseFloat($("line-thick").value) || 0.2, lineThickUnit);
+
+  const lineStyle = $("line-style").value;
+  const majorEvery = Math.max(2, parseInt($("major-every").value, 10) || 5);
+  const majorMult = Math.max(1, parseFloat($("major-mult").value) || 2);
+
+  const renderMode = getSeg($("render-mode-seg"));
+  const vertexSize = toMm(parseFloat($("vertex-size").value) || 0.8, $("vertex-size-unit").value);
+  const crossArm = parseFloat($("cross-arm").value) || 1.5; // mm directly
+
+  const lineColor = $("line-color").value;
+  const bgColor = $("bg-color").value;
+  const bgTransparent = $("bg-transparent").checked;
+
+  const paperSize = $("paper-size").value;
+  const orientation = getSeg($("orient-seg"));
+  const customUnit = $("custom-unit").value;
+  const customW = toMm(parseFloat($("custom-w").value) || 210, customUnit);
+  const customH = toMm(parseFloat($("custom-h").value) || 297, customUnit);
+  const { w: paperW, h: paperH } = paperDims(paperSize, orientation, { w: customW, h: customH });
+
+  const tiling = parseInt($("tiling").value, 10) || 1;
+  const pdfMargin = parseFloat($("pdf-margin").value) || 0;
+  const pdfGutter = parseFloat($("pdf-gutter").value) || 0;
+
+  const dpiScale = parseInt(getSeg($("dpi-seg")), 10) || 2;
+
+  // Limits: when checked, convert "N cells" to an mm extent using the grid's cell span.
+  const limitWOn = $("limit-w-check").checked;
+  const limitHOn = $("limit-h-check").checked;
+  const limitWN = Math.max(1, parseInt($("limit-w-n").value, 10) || 10);
+  const limitHN = Math.max(1, parseInt($("limit-h-n").value, 10) || 10);
+  const span = cellSpan(gridType, cellW, cellH);
+  const limitW = limitWOn ? limitWN * span.w : null;
+  const limitH = limitHOn ? limitHN * span.h : null;
+
+  return {
+    gridType, renderMode,
+    cellW, cellH,
+    lineThickness, lineColor, lineStyle, majorEvery, majorMult,
+    vertexSize, crossArm,
+    bgColor, bgTransparent,
+    paperSize, orientation, paperW, paperH,
+    tiling, pdfMargin, pdfGutter,
+    dpiScale,
+    limitW, limitH,
+  };
+}
+
+function applyConfig(c) {
+  if (!c) return;
+  if (c.gridType) $("grid-type").value = c.gridType;
+  if (c.renderMode) setSeg($("render-mode-seg"), c.renderMode);
+  if (c.cellUnit) $("cell-unit").value = c.cellUnit;
+  if (c.cellW != null) $("cell-w").value = c.cellW;
+  if (c.cellH != null) $("cell-h").value = c.cellH;
+  if (c.lineColor) { $("line-color").value = c.lineColor; $("line-color-text").value = c.lineColor; }
+  if (c.lineThickness != null) $("line-thick").value = c.lineThickness;
+  if (c.lineThicknessUnit) $("line-thick-unit").value = c.lineThicknessUnit;
+  if (c.lineStyle) $("line-style").value = c.lineStyle;
+  if (c.majorEvery != null) $("major-every").value = c.majorEvery;
+  if (c.majorMult != null) $("major-mult").value = c.majorMult;
+  if (c.vertexSize != null) $("vertex-size").value = c.vertexSize;
+  if (c.vertexSizeUnit) $("vertex-size-unit").value = c.vertexSizeUnit;
+  if (c.crossArm != null) $("cross-arm").value = c.crossArm;
+  if (c.bgColor) { $("bg-color").value = c.bgColor; $("bg-color-text").value = c.bgColor; }
+  if (c.bgTransparent != null) $("bg-transparent").checked = !!c.bgTransparent;
+  if (c.paperSize) $("paper-size").value = c.paperSize;
+  if (c.orientation) setSeg($("orient-seg"), c.orientation);
+  if (c.tiling) $("tiling").value = c.tiling;
+  if (c.pdfMargin != null) $("pdf-margin").value = c.pdfMargin;
+  if (c.pdfGutter != null) $("pdf-gutter").value = c.pdfGutter;
+  updateConditionalRows();
+}
+
+// ---------- Render ----------
+let currentSvgString = "";
+let renderToken = 0;
+function render() {
+  const cfg = readConfig();
+  currentSvgString = buildSvg(cfg);
+  $("svg-container").innerHTML = currentSvgString;
+  // Update preview-toolbar info
+  const dpi = cfg.dpiScale * 96; // CSS pixels per inch * scale
+  const pxW = Math.round(cfg.paperW / 25.4 * dpi);
+  const pxH = Math.round(cfg.paperH / 25.4 * dpi);
+  $("preview-dims").textContent =
+    `${cfg.paperW.toFixed(1)} × ${cfg.paperH.toFixed(1)} mm  (${pxW} × ${pxH} px @ ${dpi} dpi)`;
+  const cellMm = cfg.cellW;
+  $("preview-cells").textContent =
+    `cell ≈ ${cellMm.toFixed(2)} mm (${(cellMm/25.4).toFixed(3)} in)`;
+  $("dpi-hint").textContent = `PNG/WEBP will be ${pxW} × ${pxH} px`;
+}
+
+// Debounced render
+let renderTimer = null;
+function scheduleRender() {
+  clearTimeout(renderTimer);
+  renderTimer = setTimeout(render, 60);
+}
+
+// ---------- Conditional UI ----------
+function updateConditionalRows() {
+  const ls = $("line-style").value;
+  const rm = getSeg($("render-mode-seg"));
+  const ps = $("paper-size").value;
+  const gridType = $("grid-type").value;
+  const hexLike = gridType.startsWith("hex") || gridType === "isometric" || gridType.startsWith("triangle");
+  $("major-row").style.display = (rm === "lines" && ls === "major-minor") ? "" : "none";
+  $("vertex-size-row").style.display = (rm === "dots") ? "" : "none";
+  $("cross-arm-row").style.display = (rm === "crosses") ? "" : "none";
+  $("custom-paper-row").style.display = (ps === "Custom") ? "" : "none";
+  // Cell H label: for hex/iso/tri, show "size" only.
+  $("cell-h").style.display = hexLike ? "none" : "";
+  $("cell-h-label").style.display = hexLike ? "none" : "";
+  $("cell-w-label").textContent = hexLike ? "size" : "W";
+  $("lock-aspect").parentElement.style.opacity = hexLike ? 0.5 : 1;
+  // Limit-cells inputs follow their own checkbox.
+  $("limit-w-n").disabled = !$("limit-w-check").checked;
+  $("limit-h-n").disabled = !$("limit-h-check").checked;
+}
+
+// ---------- Export: file download helpers ----------
+function download(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+function timestampedName(ext) {
+  const cfg = readConfig();
+  const t = new Date().toISOString().replace(/[-:T]/g, "").slice(0, 13);
+  return `gah-${cfg.gridType}-${t}.${ext}`;
+}
+
+// ---------- Export: SVG ----------
+function exportSVG() {
+  render();
+  const blob = new Blob([currentSvgString], { type: "image/svg+xml;charset=utf-8" });
+  download(blob, timestampedName("svg"));
+}
+
+// ---------- Export: PNG / WEBP ----------
+async function exportRaster(mime, ext) {
+  const cfg = readConfig();
+  let svgStr = buildSvg(cfg);
+  const dpi = cfg.dpiScale * 96;
+  const pxW = Math.round(cfg.paperW / 25.4 * dpi);
+  const pxH = Math.round(cfg.paperH / 25.4 * dpi);
+  // Force the SVG to rasterize at the target pixel size for sharp output.
+  // (Default builds width="Wmm" which would rasterize at 96dpi then upscale.)
+  svgStr = svgStr.replace(/width="[^"]+" height="[^"]+"/, `width="${pxW}" height="${pxH}"`);
+  const blob = new Blob([svgStr], { type: "image/svg+xml;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  try {
+    const img = await loadImage(url);
+    const canvas = document.createElement("canvas");
+    canvas.width = pxW; canvas.height = pxH;
+    const ctx = canvas.getContext("2d");
+    if (!cfg.bgTransparent) {
+      ctx.fillStyle = cfg.bgColor;
+      ctx.fillRect(0, 0, pxW, pxH);
+    }
+    ctx.drawImage(img, 0, 0, pxW, pxH);
+    const outBlob = await new Promise(res => canvas.toBlob(res, mime, 0.95));
+    download(outBlob, timestampedName(ext));
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+function loadImage(url) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = url;
+  });
+}
+
+// ---------- Export: PDF ----------
+async function exportPDF() {
+  const cfg = readConfig();
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({
+    unit: "mm",
+    format: [cfg.paperW, cfg.paperH],
+    orientation: cfg.paperW > cfg.paperH ? "landscape" : "portrait",
+  });
+
+  const { rows, cols } = tileLayout(cfg.tiling, cfg.paperW, cfg.paperH);
+  const innerW = cfg.paperW - 2 * cfg.pdfMargin;
+  const innerH = cfg.paperH - 2 * cfg.pdfMargin;
+  const tileW = (innerW - (cols - 1) * cfg.pdfGutter) / cols;
+  const tileH = (innerH - (rows - 1) * cfg.pdfGutter) / rows;
+
+  // Build one SVG sized for the tile dimensions so cell sizes stay accurate.
+  const tileCfg = { ...cfg, paperW: tileW, paperH: tileH };
+  const svgStr = buildSvg(tileCfg);
+  // svg2pdf needs a parsed SVG element.
+  const parser = new DOMParser();
+  const svgDoc = parser.parseFromString(svgStr, "image/svg+xml");
+  const svgEl = svgDoc.documentElement;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const x = cfg.pdfMargin + c * (tileW + cfg.pdfGutter);
+      const y = cfg.pdfMargin + r * (tileH + cfg.pdfGutter);
+      // Clone the element so svg2pdf has a fresh tree each pass.
+      const clone = svgEl.cloneNode(true);
+      // jsPDF.svg() returns a promise; uses svg2pdf under the hood when present.
+      await doc.svg(clone, { x, y, width: tileW, height: tileH });
+    }
+  }
+  doc.save(timestampedName("pdf"));
+}
+
+// ---------- Preset UI wiring ----------
+function renderPresetCards(activeName) {
+  const wrap = $("preset-cards");
+  wrap.innerHTML = "";
+  for (const preset of BUILTIN_PRESETS) {
+    const card = document.createElement("div");
+    card.className = "preset-card" + (preset.name === activeName ? " active" : "");
+    card.dataset.name = preset.name;
+    card.title = preset.name;
+    const thumb = document.createElement("div");
+    thumb.className = "thumb";
+    const img = document.createElement("img");
+    img.src = buildPresetThumbnail(preset);
+    img.alt = preset.name;
+    thumb.appendChild(img);
+    const label = document.createElement("div");
+    label.className = "name";
+    label.textContent = preset.name;
+    card.appendChild(thumb);
+    card.appendChild(label);
+    card.addEventListener("click", () => {
+      applyConfig(preset.cfg);
+      wrap.querySelectorAll(".preset-card").forEach(c => c.classList.remove("active"));
+      card.classList.add("active");
+      scheduleRender();
+    });
+    wrap.appendChild(card);
+  }
+}
+
+// ---------- Wire everything ----------
+function init() {
+  // Mirror color picker ↔ text field
+  const bind = (picker, text) => {
+    $(picker).addEventListener("input", () => { $(text).value = $(picker).value; scheduleRender(); });
+    $(text).addEventListener("change", () => {
+      const v = $(text).value.trim();
+      if (/^#[0-9a-fA-F]{6}$/.test(v)) { $(picker).value = v; scheduleRender(); }
+    });
+  };
+  bind("line-color", "line-color-text");
+  bind("bg-color", "bg-color-text");
+
+  // Change listeners for every input
+  const ids = [
+    "grid-type","cell-w","cell-h","cell-unit","lock-aspect",
+    "limit-w-check","limit-w-n","limit-h-check","limit-h-n",
+    "line-thick","line-thick-unit","line-style","major-every","major-mult",
+    "vertex-size","vertex-size-unit","cross-arm",
+    "bg-transparent",
+    "paper-size","custom-w","custom-h","custom-unit",
+    "tiling","pdf-margin","pdf-gutter",
+  ];
+  for (const id of ids) {
+    const el = $(id);
+    if (!el) continue;
+    el.addEventListener("input", () => { updateConditionalRows(); scheduleRender(); });
+    el.addEventListener("change", () => { updateConditionalRows(); scheduleRender(); });
+  }
+
+  wireSeg($("render-mode-seg"), () => { updateConditionalRows(); scheduleRender(); });
+  wireSeg($("orient-seg"), () => scheduleRender());
+  wireSeg($("dpi-seg"), () => scheduleRender());
+
+  // Collapsible sidebar sections
+  document.querySelectorAll(".group h2").forEach(h => {
+    h.addEventListener("click", () => h.parentElement.classList.toggle("collapsed"));
+  });
+
+  $("export-png").addEventListener("click", () => exportRaster("image/png", "png"));
+  $("export-webp").addEventListener("click", () => exportRaster("image/webp", "webp"));
+  $("export-svg").addEventListener("click", exportSVG);
+  $("export-pdf").addEventListener("click", () => {
+    if (!window.jspdf || !window.jspdf.jsPDF) {
+      alert("PDF library failed to load (need internet for first run).");
+      return;
+    }
+    exportPDF().catch(err => { console.error(err); alert("PDF export failed: " + err.message); });
+  });
+
+  // Apply the first preset by default so the UI shows a consistent starting state.
+  const first = BUILTIN_PRESETS[0];
+  applyConfig(first.cfg);
+  renderPresetCards(first.name);
+  updateConditionalRows();
+  render();
+}
+
+document.addEventListener("DOMContentLoaded", init);
+})();
+</script>
+</body>
+</html>
